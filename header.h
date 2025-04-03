@@ -10,7 +10,7 @@
 // MQTT topic for IR sensor
 const char* topic_publish_dht22 = "esp32/dht22";
 const char* topic_publish_mq135 = "esp32/mq135"; 
-const char* topic_publish_crispVal = "esp32/crispVal";
+//const char* topic_publish_crispVal = "esp32/crispVal";
 const char* topic_publish_fanSpeed = "esp32/fanSpeed";
 const char* topic_subscribe = "esp32/receive";
 
@@ -32,4 +32,4 @@ double z[9] = {0};
 uint8_t rule = 0;
 double aTot = 0;
 double zTot = 0;
-double zRes = 0;
+double zRes = 0;    
