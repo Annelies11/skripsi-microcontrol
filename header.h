@@ -26,3 +26,10 @@ PubSubClient mqttClient(wifiClient);
 
 // Variables for timing
 long previous_time = 0;
+
+double aPred[9] = {0};
+double z[9] = {0};
+uint8_t rule = 0;
+double aTot = 0;
+double zTot = 0;
+double zRes = 0;

@@ -74,29 +74,89 @@ void loop() {
   }
   mqttClient.loop();
   
-  uint8_t dht_int = map(analogRead(dht22), 0, 4095, 0, 100);
-  uint8_t mq_int = map(analogRead(mq135), 0, 4095, 0, 100);
-  double crispVal_double = fuzzy(double(dht_int), double(mq_int));
+  uint8_t dht_int = map(analogRead(dht22), 0, 4095, 10, 90);
+  uint8_t mq_int = map(analogRead(mq135), 0, 4095, 50, 110);
+  
   String dhtVal = String(dht_int);
   String mqVal = String(mq_int);
-  String crispVal = String(crispVal_double);
-  fanSpeedState = (crispVal_double > 0 && crispVal_double < 50) ? "Normal" : "Cepat";
 
+  //          asap  and suhu     kecepatan
+  //rule 1 : rendah and normal = normal
+  rule = 0;
+  aPred[rule] = min(crispValMQ(mq_int, 'r'),crispValDht(dht_int, 'n'));
+  z[rule] = aPred[rule] == 0.00 ? 80 : 180 - (100 * aPred[rule]);
+  //rule 2 : rendah and hangat = normal
+  rule = 1;
+  aPred[rule] = min(crispValMQ(mq_int, 'r'),crispValDht(dht_int, 'h'));
+  z[rule] = aPred[rule] == 0.00 ? 80 : 180 - (100 * aPred[rule]);
+  //rule 3 : rendah and panas  = normal
+  rule = 2;
+  aPred[rule] = min(crispValMQ(mq_int, 'r'),crispValDht(dht_int, 'p'));
+  z[rule] = aPred[rule] == 0.00 ? 80 : 180 - (100 * aPred[rule]);
+  //rule 4 : sedang and normal = normal
+  rule = 3;
+  aPred[rule] = min(crispValMQ(mq_int, 's'),crispValDht(dht_int, 'n'));
+  z[rule] = aPred[rule] == 0.00 ? 80 : 180 - (100 * aPred[rule]);
+  //rule 5 : sedang and hangat = tinggi
+  rule = 4;
+  aPred[rule] = min(crispValMQ(mq_int, 's'),crispValDht(dht_int, 'h'));
+  z[rule] = aPred[rule] == 0.00 ? 110 : 110 + (130 * aPred[rule]);
+  //rule 6 : sedang and panas  = tinggi
+  rule = 5;
+  aPred[rule] = min(crispValMQ(mq_int, 's'),crispValDht(dht_int, 'p'));
+  z[rule] = aPred[rule] == 0.00 ? 110 : 110 + (130 * aPred[rule]);
+  //rule 7 : tinggi and normal = normal
+  rule = 6;
+  aPred[rule] = min(crispValMQ(mq_int, 't'),crispValDht(dht_int, 'n'));
+  z[rule] = aPred[rule] == 0.00 ? 80 : 180 - (100 * aPred[rule]);
+  //rule 8 : tinggi and hangat = tinggi
+  rule = 7;
+  aPred[rule] = min(crispValMQ(mq_int, 't'),crispValDht(dht_int, 'h'));
+  z[rule] = aPred[rule] == 0.00 ? 110 : 110 + (130 * aPred[rule]);
+  //rule 9 : tinggi and panas  = tinggi
+  rule = 8;
+  aPred[rule] = min(crispValMQ(mq_int, 't'),crispValDht(dht_int, 'p'));
+  z[rule] = aPred[rule] == 0.00 ? 110 : 110 + (130 * aPred[rule]);
+
+  for(int i = 0; i < 9; i++){
+    aTot = aTot + aPred[i];
+    zTot = zTot + (aPred[i]*z[i]);
+  }
+  zRes = zTot / aTot;
   long now = millis();
   if (now - previous_time > 1000) { // Publish every 1 seconds
     previous_time = now;
-        
+//    Serial.println(String()+F("DHT : ")+dhtCrispArr[0]+F(" : ")+dhtCrispArr[1]+F(" : ")+dhtCrispArr[2]+F("| MQ : ")+mqCrispArr[0]+F(" : ")+mqCrispArr[1]+F(" : ")+mqCrispArr[2]);
+//    Serial.println(String()+F("MIN DHT : ")+max(getDhtCrispVal[0],max(getDhtCrispVal[1], getDhtCrispVal[2])));
+//    Serial.println("  RULE 1   |   RULE 2  |    RULE 3  |     RULE 4");
+//    Serial.println(String()+F("a:")+aPred[0]+F("z:")+z[0]+F(" |a:")+aPred[1]+F("z:")+z[1]+F(" |a:")+aPred[2]+F("z:")+z[2]+F(" |a:")+aPred[3]+F("z:")+z[3]);
+    
+    Serial.println(String()+F("Suhu : ")+dhtVal+F("°C | Asap : ")+mqVal+F(" ppm = Fan Speed : ")+zRes);
+    Serial.print("a=");
+    for (int i = 0; i < 8; i++){
+      Serial.print(aPred[i]);
+      Serial.print("|");
+    }
+    Serial.println(aPred[8]);
+    Serial.print("z=");
+    for (int i = 0; i < 8; i++){
+      Serial.print(z[i]);
+      Serial.print("|");
+    }
+    Serial.println(z[8]);   
     // Publish the sensor value to the MQTT topic
-    Serial.print(dhtVal);
-    Serial.print(" : ");
-    Serial.print(mqVal);
-    Serial.print(" : ");
-    Serial.print(crispVal);
-    Serial.print(" : ");
-    Serial.println(fanSpeedState);
+//    Serial.print(dhtVal);
+//    Serial.print(" : ");
+//    Serial.print(mqVal);
+//    Serial.print(" : ");
+//    Serial.print(crispVal);
+//    Serial.print(" : ");
+//    Serial.println(fanSpeedState);
     mqttClient.publish(topic_publish_dht22, dhtVal.c_str());
     mqttClient.publish(topic_publish_mq135, mqVal.c_str());
-    mqttClient.publish(topic_publish_crispVal, crispVal.c_str());
-    mqttClient.publish(topic_publish_fanSpeed, fanSpeedState.c_str());
+//    mqttClient.publish(topic_publish_crispVal, crispVal.c_str());
+//    mqttClient.publish(topic_publish_fanSpeed, fanSpeedState.c_str());
   }
+  aTot = 0;
+  zTot = 0;
 }
