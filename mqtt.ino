@@ -19,6 +19,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     fanInc();
   } else if (message == "FANDEC") {
     fanDec();
+  } else if (message == "AUTO") {
+    autoMan(1);
+  } else if (message == "MANUAL") {
+    autoMan(2);
   }
 }
 
@@ -48,9 +52,11 @@ void reconnect() {
 
 void setup() {
   Serial.begin(115200);
-  pinMode(red, OUTPUT);
-  pinMode(yell, OUTPUT);
-  pinMode(gre, OUTPUT);
+
+  //PWM Motor
+  ledcSetup(M1A_PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+  ledcAttachPin(pwmPin, M1A_PWM_CHANNEL);
+  
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -66,6 +72,7 @@ void setup() {
 
   pinMode(dht22, INPUT);
   pinMode(mq135, INPUT);
+  pinMode(hvPin, OUTPUT);
 }
 
 void loop() {
@@ -116,7 +123,7 @@ void loop() {
   //rule 9 : tinggi and panas  = tinggi
   rule = 8;
   aPred[rule] = min(crispValMQ(mq_int, 't'),crispValDht(dht_int, 'p'));
-  z[rule] = min(aPred[rule] == 0.00 ? 110 : 110 + (130 * aPred[rule]), 240.00);
+  z[rule] = min(aPred[rule] == 0.00 ? 110 : 110 + (130 * aPred[rule]), double(240));
   
   aTot = 0;
   zTot = 0;
@@ -124,36 +131,72 @@ void loop() {
     aTot = aTot + aPred[i];
     zTot = zTot + (aPred[i]*z[i]);
   }
+  
   // Pemberian nilai default jika tidak ada rule aktif
   if (aTot > 0) {
     zRes = zTot / aTot;
   } else {
     zRes = 80; 
   }
-//  zRes = zTot / aTot;
-  String fanSpeed = String(zRes);
-  long now = millis();
-  if (now - previous_time > 1000) { // Publish every 1 seconds
-    previous_time = now;
+
+  if (hvStat == true){            //Jika hv menyala, maka kipas akan menyala dan secara default mengguanakn perhitungan fuzzy
+    if(modeAuto == true) {        //Ketika modeAuto true, maka kecepatan referensi berasal dari perhitungan fuzzy
+      speedRef = int(zRes);       //Inisiasi speedRef dengan nilai dari perhitungan fuzzy
+      if (changeMode == false) changeMode = true;
+    } else {
+      speedRef = manualSpeedRef;  //Inisialisasi speedRef dengan kecepatan manual
+      if (changeMode == true) {   //Ketika modeAuto false, 
+       changeMode = false;        //mentrigger perubahan mode,
+       manualSpeedRef = zRes;     //untuk mengambil nilai terakhir dari perhitungan fuzzy
+      } 
+    }
+  } else {                        //Jika hv mati, maka kipas mati
+    speedRef = 0;
+  }
   
-    Serial.println(String()+F("Suhu : ")+dhtVal+F("°C | Asap : ")+mqVal+F(" ppm = Fan Speed : ")+zRes);
-    Serial.print("a=");
-    for (int i = 0; i < 8; i++){
-      Serial.print(aPred[i]);
-      Serial.print("|");
-    }
-    Serial.println(aPred[8]);
-    Serial.print("z=");
-    for (int i = 0; i < 8; i++){
-      Serial.print(z[i]);
-      Serial.print("|");
-    }
-    Serial.println(z[8]);   
+  String publishedSpeed = String(speedRef);
+  long now = millis();
+  
+  if (now - previous_time > 1000) { //Mempublish setiap satu detik
+    previous_time = now;
     
+    if(modeAuto == true){
+      Serial.print("Mode : Auto | ");
+    } else {
+      Serial.print("Mode : Manual | ");
+    }
+    
+    if(hvStat == true){
+      Serial.print("HV : Nyala | ");
+    } else {
+      Serial.print("HV : Mati | ");
+    }
+    
+    Serial.println(String()+F("Speed : ")+speedRef);
     // Publish the sensor value to the MQTT topic
     mqttClient.publish(topic_publish_dht22, dhtVal.c_str());
     mqttClient.publish(topic_publish_mq135, mqVal.c_str());
-    mqttClient.publish(topic_publish_fanSpeed, fanSpeed.c_str());
+    mqttClient.publish(topic_publish_fanSpeed, publishedSpeed.c_str());
   }
   
+  ledcWrite(M1A_PWM_CHANNEL, min(speedRef, 255)); //Mengendalikan kecepatan kipas pada pin kipas
+  
 }
+
+
+//DUMP
+//    Serial.println(String()+F("Suhu : ")+dhtVal+F("°C | Asap : ")+mqVal+F(" ppm = Fan Speed : ")+zRes+F("Mode : ")+modeAuto);
+//    Serial.print("a=");
+//    for (int i = 0; i < 8; i++){
+//      Serial.print(aPred[i]);
+//      Serial.print("|");
+//    }
+//    Serial.println(aPred[8]);
+//    Serial.print("z=");
+//    for (int i = 0; i < 8; i++){
+//      Serial.print(z[i]);
+//      Serial.print("|");
+//    }
+//    Serial.println(z[8]);   
+//    
+//    Serial.println(String()+F(" | Speed : ")+zRes);
