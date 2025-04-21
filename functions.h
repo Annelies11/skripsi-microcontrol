@@ -1,13 +1,13 @@
 void hvOn(){ //Menyalakan prototip 
   Serial.println("Electrostatis Nyala");
-  digitalWrite(hvPin, HIGH);
-  hvStat = true;
+  digitalWrite(hvPin, LOW);
+  hvStat = false;
 }
 
 void hvOff(){ //mematikan prototip 
   Serial.println("Electrostatis Mati");
-  digitalWrite(hvPin, LOW);
-  hvStat = false;
+  digitalWrite(hvPin, HIGH);
+  hvStat = true;
 }
 
 void fanInc(){ //menambah kecepatan kipas jika dirubah menjadi mode manual
@@ -71,4 +71,14 @@ double crispValMQ(double mqVal, char state){ //r : Rendah | s : Sedang | t : Tin
     else x = (mqVal - 86) / 14;
   }
   return x;
+}
+
+float movingAverage(float newValue) {
+  filterBuffer[filterIndex] = newValue;
+  filterIndex = (filterIndex + 1) % FILTER_SIZE;
+  float sum = 0;
+  for (int i = 0; i < FILTER_SIZE; i++) {
+    sum += filterBuffer[i];
+  }
+  return sum / FILTER_SIZE;
 }
